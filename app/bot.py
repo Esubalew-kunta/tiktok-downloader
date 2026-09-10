@@ -1,8 +1,10 @@
 import asyncio
 import logging
 import os
+import threading
 from typing import Any
 
+from flask import Flask, jsonify
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
@@ -12,6 +14,12 @@ from .downloader import DownloadError, download_media
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+app_server = Flask(__name__)
+
+
+@app_server.route("/health", methods=["GET"])
+def health_check() -> tuple[str, int]:
+    return jsonify({"status": "ok"}), 200
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -68,6 +76,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 def main() -> None:
+    port = int(os.environ.get("PORT", "10000"))
+
+    def run_health_server() -> None:
+        app_server.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+    server_thread = threading.Thread(target=run_health_server, daemon=True)
+    server_thread.start()
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
