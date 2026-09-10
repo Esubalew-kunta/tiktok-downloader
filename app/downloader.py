@@ -2,7 +2,6 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 import yt_dlp
 
@@ -24,13 +23,14 @@ def download_media(url: str) -> tuple[str, str]:
     if not url:
         raise DownloadError("No URL was provided.")
 
+    output_dir = tempfile.mkdtemp(prefix="telegram_dl_")
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": False,
         "noplaylist": True,
         "format": "bestvideo+bestaudio/best",
-        "outtmpl": os.path.join(tempfile.gettempdir(), "telegram_dl_%(title)s.%(ext)s"),
+        "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
         "merge_output_format": "mp4",
         "restrictfilenames": False,
         "socket_timeout": 30,
@@ -46,15 +46,21 @@ def download_media(url: str) -> tuple[str, str]:
 
         title = info.get("title") or "download"
         safe_title = sanitize_filename(title)
-        file_path = os.path.join(tempfile.gettempdir(), f"telegram_dl_{safe_title}.%(ext)s")
-        ydl.params["outtmpl"] = file_path
+        final_outtmpl = os.path.join(output_dir, f"{safe_title}.%(ext)s")
+        ydl.params["outtmpl"] = final_outtmpl
         ydl.download([url])
 
     downloaded_file = None
-    for path in Path(tempfile.gettempdir()).glob(f"telegram_dl_{safe_title}.*"):
+    for path in Path(output_dir).glob(f"{safe_title}.*"):
         if path.is_file() and path.stat().st_size > 0:
             downloaded_file = str(path)
             break
+
+    if not downloaded_file:
+        for path in Path(output_dir).glob("*"):
+            if path.is_file() and path.stat().st_size > 0:
+                downloaded_file = str(path)
+                break
 
     if not downloaded_file:
         raise DownloadError("The link did not produce a downloadable file.")
